@@ -1,0 +1,51 @@
+name: ChunkyBlocks
+main: cah.melonar.ChunkyBlocks
+author: Melonar
+version: 1.0
+description: |
+  Block based - If sponge (default) is in a chunk, that chunk will not be unloaded.  When that chunk attempts to be unloaded, it will ensure the adjacent chunks are loaded.
+  Command based - Chunks are specified by players (with permission) to remain loaded.  Those chunks and their adjacent chunks will remain loaded.
+commands:
+  setchunk:
+    description: Set a chunk to remain loaded.
+    permission: chunkyblocks.set
+    usage: /<command> [label] - Set chunk to keep loaded (with [label])
+  removechunk:
+    description: Remove chunk from load list.
+    permission: chunkyblocks.remove
+    usage: /<command> [label] - Remove chunk from load list (with [label])
+  mychunks:
+    description: List chunks belonging to yourself.
+    permission: chunkyblocks.list
+    usage: /<command> - List chunks belonging to you.
+  listchunks:
+    description: List chunks belonging to a player.
+    permission: chunkyblocks.adminlist
+    usage: /<command> <player> - List chunks belonging to <player>.
+  telechunk:
+    description: Teleport to the highest block in the center of the chunk.
+    permission: chunkyblocks.adminteleport
+    usage: /<command> <player> [label] - Teleport to specified chunk.
+  removechunkadmin:
+    description: Remove another player's chunk from the list.
+    permission: chunkyblocks.adminremove
+    usage: /<command> <player> [label] - Remove specified chunk.
+permissions:
+  chunkyblocks.user:
+    default: op
+    children:
+      chunkyblocks.set: true
+      chunkyblocks.remove: true
+      chunkyblocks.list: true
+  chunkyblocks.admin:
+    default: op
+    children:
+      chunkyblocks.adminlist: true
+      chunkyblocks.adminteleport: true
+      chunkyblocks.adminremove: true
+  chunkyblocks.set:
+  chunkyblocks.remove:
+  chunkyblocks.list:
+  chunkyblocks.adminlist:
+  chunkyblocks.adminteleport:
+  chunkyblocks.adminremove:
