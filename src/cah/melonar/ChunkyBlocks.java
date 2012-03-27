@@ -17,6 +17,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 	private final Logger logger = Logger.getLogger("Minecraft");
 	private PluginManager pm;
 	private FileConfiguration myConfig = this.getConfig();
+	private boolean debugMessages;
 	private boolean useBlock;
 	private int loadRadius;
 	private int minHeight;
@@ -40,6 +41,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 	}
 
 	private void loadConfig(){
+		debugMessages = myConfig.getBoolean("debug",false);
 		useBlock = myConfig.getBoolean("useBlock", true);
 		loadRadius = myConfig.getInt("radius", 1);
 		minHeight = myConfig.getInt("minHeight",54);
