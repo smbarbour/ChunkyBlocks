@@ -10,6 +10,3 @@ maxHeight: 74
 
 # User-specified chunks
 maxChunksPerUser: 1
-chunks:
-  Melonar:
-    - home: {world: "example", x: 0, z: 0}

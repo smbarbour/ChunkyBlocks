@@ -2,6 +2,8 @@ name: ChunkyBlocks
 main: cah.melonar.ChunkyBlocks
 author: Melonar
 version: 1.0
+database: true
+softdepend: [Vault]
 description: |
   Block based - If sponge (default) is in a chunk, that chunk will not be unloaded.  When that chunk attempts to be unloaded, it will ensure the adjacent chunks are loaded.
   Command based - Chunks are specified by players (with permission) to remain loaded.  Those chunks and their adjacent chunks will remain loaded.
@@ -43,9 +45,23 @@ permissions:
       chunkyblocks.adminlist: true
       chunkyblocks.adminteleport: true
       chunkyblocks.adminremove: true
+      chunkyblocks.overridelimit: true
   chunkyblocks.set:
+    default: false
   chunkyblocks.remove:
+    default: false
   chunkyblocks.list:
+    default: false
   chunkyblocks.adminlist:
+    default: false
   chunkyblocks.adminteleport:
+    default: false
   chunkyblocks.adminremove:
+    default: false
+  chunkyblocks.overridelimit:
+    description: Ignore maxChunksPerUser
+    default: false
+  chunkyblocks.notifyborder:
+    description: Display a message when crossing the boundary of a chunk in the chunkloading list.
+    default: false
+    
