@@ -6,7 +6,6 @@ import java.sql.SQLException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.bukkit.Location;
 import org.bukkit.Server;
 import org.bukkit.Chunk;
 import org.bukkit.Material;
@@ -32,7 +31,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 	private FileConfiguration myConfig = this.getConfig();
 	private boolean debugMessages;
 	private boolean useBlock;
-	private int loadRadius;
+	private int loadRange;
 	private int minHeight;
 	private int maxHeight;
 	private int maxChunks;
@@ -66,7 +65,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 	private void loadConfig(){
 		debugMessages = myConfig.getBoolean("debug",false);
 		useBlock = myConfig.getBoolean("useBlock", true);
-		loadRadius = myConfig.getInt("radius", 1);
+		loadRange = myConfig.getInt("radius", 1);
 		minHeight = myConfig.getInt("minHeight",54);
 		maxHeight = myConfig.getInt("maxHeight",74);
 		clMaterial = Material.getMaterial(myConfig.getInt("blockType", 19));
@@ -77,8 +76,8 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 	@EventHandler
 	public final void cbChunkUnload(ChunkUnloadEvent cuEvent){
 		World currentWorld = cuEvent.getWorld();
-		for (int worldX = (-1 * loadRadius); worldX <= loadRadius; worldX++){
-			for (int worldZ = (-1 * loadRadius); worldZ <= loadRadius; worldZ++){
+		for (int worldX = (-1 * loadRange); worldX <= loadRange; worldX++){
+			for (int worldZ = (-1 * loadRange); worldZ <= loadRange; worldZ++){
 				Chunk currentChunk = currentWorld.getChunkAt(cuEvent.getChunk().getX()+worldX, cuEvent.getChunk().getZ()+worldZ);
 				String query = "SELECT player, tag from chunks where world = '" + currentChunk.getWorld().getName() + "' AND x = " + currentChunk.getX() + " AND z = " + currentChunk.getZ();
 				ResultSet results = cbDatabase.query(query);
@@ -129,7 +128,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 				this.getServer().broadcast("ChunkyBlocks: " + player.getName() + " tried to use /setchunk but does not have permission", Server.BROADCAST_CHANNEL_ADMINISTRATIVE);
 				return false;
 			}
-			String query = "SELECT sq1.owned, world, x, z from chunks, (SELECT count(*) as owned from chunks where player = '" + player.getName() + "') sq1 where player = '" + player.getName() + "' and tag = '" + tag + ";";
+			String query = "SELECT sq1.owned, world, x, z FROM chunks, (SELECT count(*) AS owned FROM chunks WHERE player = '" + player.getName() + "') sq1 WHERE player = '" + player.getName() + "' AND tag = '" + tag + ";";
 			ResultSet results = cbDatabase.query(query);
 			Chunk here = player.getLocation().getChunk();
 			try {
@@ -139,22 +138,82 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 							String insert = "INSERT INTO chunks(player, tag, world, x, z) VALUES('" + player.getName() + "','" + tag + "','" + here.getWorld().getName() + "'," + here.getX() + "," + here.getZ() + ");";
 							cbDatabase.query(insert);
 							player.sendMessage("Location (" + tag + ") added to chunkloading list.");
+							return true;
 						} else {
 							player.sendMessage("You have already reached your chunkloading limit.");
+							return false;
 						}
 					} else {
-						String insert = "update chunks set world = '" + here.getWorld().getName() + "', x = " + here.getX() + ", z = " + here.getZ() + " where player = '" + player.getName() + "' and tag = '" + tag + "';";
+						String insert = "UPDATE chunks SET world = '" + here.getWorld().getName() + "', x = " + here.getX() + ", z = " + here.getZ() + " WHERE player = '" + player.getName() + "' AND tag = '" + tag + "';";
 						cbDatabase.query(insert);
 						player.sendMessage("Location (" + tag + ") added to chunkloading list.");
+						return true;
 					}
 				} else {
 					String update = "INSERT INTO chunks(player, tag, world, x, z) VALUES('" + player.getName() + "','" + tag + "','" + here.getWorld().getName() + "'," + here.getX() + "," + here.getZ() + ");";
 					cbDatabase.query(update);
 					player.sendMessage("Location (" + tag + ") updated in chunkloading list.");
+					return true;
 				}
 			} catch (SQLException e) {
 				e.printStackTrace();
 			}
+		}
+		if (commandName.equals("removechunk")){
+			String tag = args[0];
+			if(tag.isEmpty()) {
+				tag = "default";
+			}
+			if(!player.hasPermission("chunkyblocks.remove")){
+				player.sendMessage("You do not have permission to use this command.");
+				this.getServer().broadcast("ChunkyBlocks: " + player.getName() + " tried to use /removechunk but does not have permission", Server.BROADCAST_CHANNEL_ADMINISTRATIVE);
+				return false;
+			}
+			String query = "SELECT rowid FROM chunks WHERE player = '" + player.getName() + "' AND tag = '" + tag + ";";
+			ResultSet results = cbDatabase.query(query);
+			try {
+				if(!results.first()){
+					player.sendMessage("A chunk with the label of " + tag + " was not found for your username.");
+					return false;
+				} else {
+					String delete = "DELETE FROM chunks WHERE rowid = " + results.getInt("rowid") + ";";
+					cbDatabase.query(delete);
+				}
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+		if (commandName.equals("mychunks")){
+			String page = args[0];
+			if(page.isEmpty()){
+				page = "1";
+			}
+			if(!player.hasPermission("chunkyblocks.list")){
+				player.sendMessage("You do not have permission to use this command.");
+				this.getServer().broadcast("ChunkyBlocks: " + player.getName() + " tried to use /mychunks but does not have permission", Server.BROADCAST_CHANNEL_ADMINISTRATIVE);
+				return false;
+			}
+			String query = "SELECT tag, world, x, z FROM chunks WHERE player = '" + player.getName() + "';";
+			ResultSet results = cbDatabase.query(query);
+			try {
+				if(!results.first()){
+					player.sendMessage("No chunks are registered to your name");
+				} else {
+					while(!results.isAfterLast()){
+						
+					}
+				}
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+		if (commandName.equals("listchunks")){
+
+		}
+		if (commandName.equals("telechunk")){	
+
+		}
+		if (commandName.equals("removechunkadmin")){
 
 		}
 		return false;

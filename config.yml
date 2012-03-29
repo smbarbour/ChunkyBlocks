@@ -1,7 +1,7 @@
 # ChunkyBlocks Configuration
 #
 useBlock: true
-radius: 1
+range: 1
 
 # Chunkloading block check
 blockType: 19

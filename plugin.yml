@@ -19,11 +19,11 @@ commands:
   mychunks:
     description: List chunks belonging to yourself.
     permission: chunkyblocks.list
-    usage: /<command> - List chunks belonging to you.
+    usage: /<command> [page] - List chunks belonging to you.
   listchunks:
-    description: List chunks belonging to a player.
+    description: List chunks belonging to a player (or all chunks if player is not specified).
     permission: chunkyblocks.adminlist
-    usage: /<command> <player> - List chunks belonging to <player>.
+    usage: /<command> [player] [page] - List chunks belonging to <player>.
   telechunk:
     description: Teleport to the highest block in the center of the chunk.
     permission: chunkyblocks.adminteleport
@@ -45,7 +45,7 @@ permissions:
       chunkyblocks.adminlist: true
       chunkyblocks.adminteleport: true
       chunkyblocks.adminremove: true
-      chunkyblocks.overridelimit: true
+      chunkyblocks.overridechunklimit: true
   chunkyblocks.set:
     default: false
   chunkyblocks.remove:
@@ -58,7 +58,7 @@ permissions:
     default: false
   chunkyblocks.adminremove:
     default: false
-  chunkyblocks.overridelimit:
+  chunkyblocks.overridechunklimit:
     description: Ignore maxChunksPerUser
     default: false
   chunkyblocks.notifyborder:
