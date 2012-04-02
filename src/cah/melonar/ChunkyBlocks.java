@@ -57,7 +57,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 		cbDatabase.open();
 		if(!cbDatabase.checkTable("Chunks")) {
 			logMessage(Level.INFO, "Initializing table for first use.");
-			String query = "CREATE TABLE chunks (id INT AUTO_INCREMENT PRIMARY_KEY, player VARCHAR(16), tag VARCHAR(32), world VARCHAR(64), x INT, z INT);";
+			String query = "CREATE TABLE chunks (rowid INT AUTO_INCREMENT PRIMARY_KEY, player VARCHAR(16), tag VARCHAR(32), world VARCHAR(64), x INT, z INT);";
 			cbDatabase.createTable(query);
 		}
 	}
