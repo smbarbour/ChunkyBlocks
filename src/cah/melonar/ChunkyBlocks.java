@@ -17,6 +17,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.PluginManager;
@@ -57,7 +58,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 		cbDatabase.open();
 		if(!cbDatabase.checkTable("Chunks")) {
 			logMessage(Level.INFO, "Initializing table for first use.");
-			String query = "CREATE TABLE chunks (id INT AUTO_INCREMENT PRIMARY_KEY, player VARCHAR(16), tag VARCHAR(32), world VARCHAR(64), x INT, z INT);";
+			String query = "CREATE TABLE chunks (rowid INT AUTO_INCREMENT PRIMARY_KEY, player VARCHAR(16), tag VARCHAR(32), world VARCHAR(64), x INT, z INT);";
 			cbDatabase.createTable(query);
 		}
 	}
@@ -73,6 +74,28 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 
 	}
 
+	@EventHandler
+	public final void cbMovement(PlayerMoveEvent pmEvent){
+		Player currentPlayer = pmEvent.getPlayer();
+		if(currentPlayer.hasPermission("chunkyblocks.notifyborder") && !pmEvent.getFrom().getChunk().equals(pmEvent.getTo().getChunk())){
+			World currentWorld = currentPlayer.getWorld();
+			for (int worldX = (-1 * loadRange); worldX <= loadRange; worldX++){
+				for (int worldZ = (-1 * loadRange); worldZ <= loadRange; worldZ++){
+					Chunk currentChunk = currentWorld.getChunkAt(pmEvent.getTo().getChunk().getX()+worldX, pmEvent.getTo().getChunk().getZ()+worldZ);
+					String query = "SELECT player, tag from chunks where world = '" + currentChunk.getWorld().getName() + "' AND x = " + currentChunk.getX() + " AND z = " + currentChunk.getZ();
+					ResultSet results = cbDatabase.query(query);
+					try {
+						if(results.first()){
+							currentPlayer.sendMessage("This chunk is being kept loaded by " + results.getString("player") + " using a tag of " + results.getString("tag") + ".");
+						}
+					} catch (SQLException e) {
+						e.printStackTrace();
+					}
+				}
+			}
+		}
+	}
+	
 	@EventHandler
 	public final void cbChunkUnload(ChunkUnloadEvent cuEvent){
 		World currentWorld = cuEvent.getWorld();
