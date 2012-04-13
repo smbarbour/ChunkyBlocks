@@ -2,7 +2,8 @@ name: ChunkyBlocks
 main: cah.melonar.ChunkyBlocks
 author: Melonar
 version: 1.0
-database: true
+database: false
+depend: [SQLibrary]
 softdepend: [Vault]
 description: |
   Block based - If sponge (default) is in a chunk, that chunk will not be unloaded.  When that chunk attempts to be unloaded, it will ensure the adjacent chunks are loaded.

@@ -6,6 +6,7 @@ import java.sql.SQLException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import org.bukkit.Location;
 import org.bukkit.Server;
 import org.bukkit.Chunk;
 import org.bukkit.Material;
@@ -18,18 +19,22 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.util.ChatPaginator;
+import org.bukkit.util.ChatPaginator.ChatPage;
+
 import lib.PatPeter.SQLibrary.*;
 
 public class ChunkyBlocks extends JavaPlugin implements Listener {
 	private File pluginPath = new File("plugins" + File.pathSeparator + "ChunkyBlocks");
-	private final Logger logger = Logger.getLogger("Minecraft");
+	private final Logger myLogger = Logger.getLogger("Minecraft");
 	private PluginManager pm;
-	private PluginDescriptionFile info = this.getDescription();
-	private FileConfiguration myConfig = this.getConfig();
+	private PluginDescriptionFile info;
+	private FileConfiguration myConfig;
 	private boolean debugMessages;
 	private boolean useBlock;
 	private int loadRange;
@@ -48,9 +53,13 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 	public void onEnable(){
 		pm = getServer().getPluginManager();
 		pm.registerEvents(this, this);
+		info = this.getDescription();
 		logMessage(Level.INFO, info.getName() + " version " + info.getVersion() + " is enabled.");
+        if (!new File(pluginPath, "config.yml").isFile()) {
+            this.saveDefaultConfig();
+        }		
 		loadConfig();
-		cbDatabase = new SQLite(logger, "ChunkyBlocks", "ChunkyBlocks", pluginPath.getPath());
+		cbDatabase = new SQLite(myLogger, "ChunkyBlocks", "ChunkyBlocks", pluginPath.getPath());
 		loadDatabase();
 	}
 
@@ -64,6 +73,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 	}
 
 	private void loadConfig(){
+		myConfig = this.getConfig();
 		debugMessages = myConfig.getBoolean("debug",false);
 		useBlock = myConfig.getBoolean("useBlock", true);
 		loadRange = myConfig.getInt("radius", 1);
@@ -71,7 +81,6 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 		maxHeight = myConfig.getInt("maxHeight",74);
 		clMaterial = Material.getMaterial(myConfig.getInt("blockType", 19));
 		maxChunks = myConfig.getInt("maxChunksPerUser",1);
-
 	}
 
 	@EventHandler
@@ -85,11 +94,12 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 					String query = "SELECT player, tag from chunks where world = '" + currentChunk.getWorld().getName() + "' AND x = " + currentChunk.getX() + " AND z = " + currentChunk.getZ();
 					ResultSet results = cbDatabase.query(query);
 					try {
-						if(results.first()){
+						if(results.next()){
 							currentPlayer.sendMessage("This chunk is being kept loaded by " + results.getString("player") + " using a tag of " + results.getString("tag") + ".");
 						}
+						results.close();
 					} catch (SQLException e) {
-						e.printStackTrace();
+						logMessage(Level.WARNING, e.getMessage());
 					}
 				}
 			}
@@ -105,13 +115,14 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 				String query = "SELECT player, tag from chunks where world = '" + currentChunk.getWorld().getName() + "' AND x = " + currentChunk.getX() + " AND z = " + currentChunk.getZ();
 				ResultSet results = cbDatabase.query(query);
 				try {
-					if(results.first()){
+					if(results.next()){
 						if(debugMessages){
 							logMessage(Level.FINE, "Chunk (" + currentChunk.getWorld().toString() + ": " + worldX + ", " + worldZ + ") kept loaded by " + results.getString("player") + " with a tag of " + results.getString("tag"));
 						}
 					}
+					results.close();
 				} catch (SQLException e) {
-					e.printStackTrace();
+					logMessage(Level.WARNING, e.getMessage());
 				}
 				if(useBlock==true){
 					for (int chunkX = 0; chunkX <= 15; chunkX++){
@@ -142,7 +153,10 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 		}
 		String commandName = cmd.getName().toLowerCase();
 		if (commandName.equals("setchunk")){
-			String tag = args[0];
+			String tag = "";
+			if(args.length > 0){
+				tag = args[0];
+			}
 			if(tag.isEmpty()) {
 				tag = "default";
 			}
@@ -151,39 +165,47 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 				this.getServer().broadcast("ChunkyBlocks: " + player.getName() + " tried to use /setchunk but does not have permission", Server.BROADCAST_CHANNEL_ADMINISTRATIVE);
 				return false;
 			}
-			String query = "SELECT sq1.owned, world, x, z FROM chunks, (SELECT count(*) AS owned FROM chunks WHERE player = '" + player.getName() + "') sq1 WHERE player = '" + player.getName() + "' AND tag = '" + tag + ";";
+			String query = "SELECT sq1.owned, world, x, z FROM chunks, (SELECT count(*) AS owned FROM chunks WHERE player = '" + player.getName() + "') sq1 WHERE player = '" + player.getName() + "' AND tag = '" + tag + "';";
 			ResultSet results = cbDatabase.query(query);
 			Chunk here = player.getLocation().getChunk();
 			try {
-				if(results.first()){
+				if(results.next()){
 					if(results.getString("world").isEmpty()){
 						if(results.getInt("owned") < maxChunks){
 							String insert = "INSERT INTO chunks(player, tag, world, x, z) VALUES('" + player.getName() + "','" + tag + "','" + here.getWorld().getName() + "'," + here.getX() + "," + here.getZ() + ");";
 							cbDatabase.query(insert);
 							player.sendMessage("Location (" + tag + ") added to chunkloading list.");
+							results.close();
 							return true;
 						} else {
 							player.sendMessage("You have already reached your chunkloading limit.");
+							results.close();
 							return false;
 						}
 					} else {
 						String insert = "UPDATE chunks SET world = '" + here.getWorld().getName() + "', x = " + here.getX() + ", z = " + here.getZ() + " WHERE player = '" + player.getName() + "' AND tag = '" + tag + "';";
 						cbDatabase.query(insert);
 						player.sendMessage("Location (" + tag + ") added to chunkloading list.");
+						results.close();
 						return true;
 					}
 				} else {
 					String update = "INSERT INTO chunks(player, tag, world, x, z) VALUES('" + player.getName() + "','" + tag + "','" + here.getWorld().getName() + "'," + here.getX() + "," + here.getZ() + ");";
 					cbDatabase.query(update);
 					player.sendMessage("Location (" + tag + ") updated in chunkloading list.");
+					results.close();
 					return true;
 				}
 			} catch (SQLException e) {
-				e.printStackTrace();
+				logMessage(Level.WARNING, e.getMessage());
 			}
 		}
 		if (commandName.equals("removechunk")){
-			String tag = args[0];
+			String tag = "";
+			if(args.length > 0){
+				tag = args[0];
+			}
+
 			if(tag.isEmpty()) {
 				tag = "default";
 			}
@@ -195,19 +217,25 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 			String query = "SELECT rowid FROM chunks WHERE player = '" + player.getName() + "' AND tag = '" + tag + ";";
 			ResultSet results = cbDatabase.query(query);
 			try {
-				if(!results.first()){
+				if(!results.next()){
 					player.sendMessage("A chunk with the label of " + tag + " was not found for your username.");
+					results.close();
 					return false;
 				} else {
 					String delete = "DELETE FROM chunks WHERE rowid = " + results.getInt("rowid") + ";";
 					cbDatabase.query(delete);
+					results.close();
+					return true;
 				}
 			} catch (SQLException e) {
-				e.printStackTrace();
+				logMessage(Level.WARNING, e.getMessage());
 			}
 		}
 		if (commandName.equals("mychunks")){
-			String page = args[0];
+			String page = "";
+			if(args.length > 0){
+				page = args[0];
+			}
 			if(page.isEmpty()){
 				page = "1";
 			}
@@ -219,30 +247,167 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 			String query = "SELECT tag, world, x, z FROM chunks WHERE player = '" + player.getName() + "';";
 			ResultSet results = cbDatabase.query(query);
 			try {
-				if(!results.first()){
+				if(!results.next()){
 					player.sendMessage("No chunks are registered to your name");
+					results.close();
+					return true;
 				} else {
+					String lines = "";
 					while(!results.isAfterLast()){
-						
+						lines = lines + results.getString("tag") + " (" + results.getString("world") + ": " + results.getInt("x") + ", " + results.getInt("z") + ")\n";
+						results.next();
 					}
+					ChatPage chat = ChatPaginator.paginate(lines, Integer.parseInt(page));
+					player.sendMessage("Your chunks: " + chat.getPageNumber() + "/" + chat.getTotalPages());
+					player.sendMessage(chat.getLines());
+					results.close();
+					return true;
 				}
 			} catch (SQLException e) {
-				e.printStackTrace();
+				logMessage(Level.WARNING, e.getMessage());
 			}
 		}
 		if (commandName.equals("listchunks")){
-
+			String playerName = "";
+			int page = 0;
+			if(!player.hasPermission("chunkyblocks.adminlist")){
+				player.sendMessage("You do not have permission to use this command.");
+				return false;
+			}
+			if(args.length == 0){
+				playerName = "-";
+				page = 1;
+			} else {
+				try {
+					page = Integer.parseInt(args[0]);
+					playerName = "-";
+				} catch (NumberFormatException nfe) {
+					playerName = args[0];
+					if(args.length == 1){
+						page = 1;
+					} else {
+						try {
+							page = Integer.parseInt(args[1]);
+						} catch (NumberFormatException nfe2) {
+							player.sendMessage("Expected page number... found '" + args[1] + "' instead.");
+							return false;
+						}
+					}
+				}
+			}
+			String query = "";
+			if(playerName.equals("-")) {
+				query = "SELECT player, tag, world, x, z FROM chunks;";
+			} else {
+				query = "SELECT player, tag, world, x, z FROM chunks WHERE player = '" + playerName + "';";
+			}
+			ResultSet results = cbDatabase.query(query);
+			try {
+				if(playerName.equals("-")) { playerName = "anyone"; }
+				if(!results.next()){
+					player.sendMessage("No chunks are registered to " + playerName);
+					results.close();
+					return true;
+				} else {
+					String lines = "";
+					while(!results.isAfterLast()){
+						lines = lines + results.getString("player") + " " + results.getString("tag") + " (" + results.getString("world") + ": " + results.getInt("x") + ", " + results.getInt("z") + ")\n";
+						results.next();
+					}
+					ChatPage chat = ChatPaginator.paginate(lines, page);
+					player.sendMessage("Chunks: " + chat.getPageNumber() + "/" + chat.getTotalPages());
+					player.sendMessage(chat.getLines());
+					results.close();
+					return true;
+				}
+			} catch (SQLException e) {
+				logMessage(Level.WARNING, e.getMessage());
+			}
 		}
 		if (commandName.equals("telechunk")){	
-
+			if(!player.hasPermission("chunkyblocks.adminteleport")){
+				player.sendMessage("You do not have permission to use this command.");
+				return true;
+			}
+			String playerName = "";
+			if(args.length > 0){
+				playerName = args[0];
+			} else {
+				player.sendMessage("You must specify a player's name!");
+				return false;
+			}
+			String tag = "";
+			if(args.length > 1){
+				tag = args[1];
+			} else {
+				tag = "default";
+			}
+			String query = "SELECT world, x, z FROM chunks WHERE player = '" + playerName + "' and tag = '" + tag + "';";
+			ResultSet results = cbDatabase.query(query);
+			try {
+				if(!results.next()){
+					player.sendMessage("No chunk found for Player: " + playerName + ", with Tag: " + tag);
+					results.close();
+					return true;
+				} else {
+					Chunk destChunk = this.getServer().getWorld(results.getString("world")).getChunkAt(results.getInt("x"),results.getInt("z"));
+					Location teleTo = null;
+					for(int y=255;y>0;y--){
+						if(!destChunk.getBlock(7, y-1, 7).isEmpty()){
+							teleTo = destChunk.getBlock(7, y, 7).getLocation();
+						}
+					}
+					if(teleTo == null){
+						player.sendMessage("There appears to be a hole in the world at the teleport location!");
+						results.close();
+						return true;
+					} else {
+						player.teleport(teleTo, TeleportCause.COMMAND);
+					}
+				}
+			} catch (SQLException e) {
+				logMessage(Level.WARNING, e.getMessage());
+			}
 		}
 		if (commandName.equals("removechunkadmin")){
-
+			if(!player.hasPermission("chunkyblocks.adminremove")){
+				player.sendMessage("You do not have permission to use this command.");
+				return true;
+			}
+			String playerName = "";
+			if(args.length > 0){
+				playerName = args[0];
+			} else {
+				player.sendMessage("You must specify a player name.");
+				return false;
+			}
+			String tag = "";
+			if(args.length > 1){
+				tag = args[1];
+			} else {
+				tag = "default";
+			}
+			String query = "SELECT rowid FROM chunks WHERE player = '" + playerName + "' AND tag = '" + tag + ";";
+			ResultSet results = cbDatabase.query(query);
+			try {
+				if(!results.next()){
+					player.sendMessage("A chunk with the label of " + tag + " was not found for " + playerName + ".");
+					results.close();
+					return true;
+				} else {
+					String delete = "DELETE FROM chunks WHERE rowid = " + results.getInt("rowid") + ";";
+					cbDatabase.query(delete);
+					results.close();
+					return true;
+				}
+			} catch (SQLException e) {
+				logMessage(Level.WARNING, e.getMessage());
+			}
 		}
 		return false;
 	}
 
 	private void logMessage(Level logLevel, String message) {
-		logger.log(logLevel, "[" + info.getName() + "]: " + message);
+		myLogger.log(logLevel, "[" + info.getName() + "]: " + message);
 	}
 }
