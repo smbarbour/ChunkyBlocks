@@ -31,7 +31,6 @@ import org.bukkit.util.ChatPaginator;
 import org.bukkit.util.ChatPaginator.ChatPage;
 
 import com.avaje.ebean.EbeanServer;
-import com.avaje.ebean.Query;
 
 public class ChunkyBlocks extends JavaPlugin implements Listener {
 	private File pluginPath = new File("plugins" + File.pathSeparator + "ChunkyBlocks");
@@ -47,8 +46,6 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 	private int maxChunks;
 	private Material clMaterial;
 	private EbeanServer database;
-	Query<ChunkDB> chunkTable;
-
 
 	@Override
 	public List<Class<?>> getDatabaseClasses() {
@@ -83,7 +80,6 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 			logMessage(Level.INFO, "Installing database on first use.");
 			installDDL();
 		}
-		chunkTable = database.find(ChunkDB.class);
 	}
 
 	private void loadConfig(){
@@ -107,7 +103,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 		if(currentPlayer.hasPermission("chunkyblocks.notifyborder") && !pmEvent.getFrom().getChunk().equals(pmEvent.getTo().getChunk())){
 			World currentWorld = currentPlayer.getWorld();
 			Chunk currentChunk = currentWorld.getChunkAt(currentPlayer.getLocation());
-			ChunkDB result = chunkTable.where().ieq("world", currentChunk.getWorld().getName()).between("x", currentChunk.getX()-loadRange, currentChunk.getX()+loadRange ).between("z", currentChunk.getZ()-loadRange, currentChunk.getZ()+loadRange).findUnique();
+			ChunkDB result = database.find(ChunkDB.class).where().ieq("world", currentChunk.getWorld().getName()).between("x", currentChunk.getX()-loadRange, currentChunk.getX()+loadRange ).between("z", currentChunk.getZ()-loadRange, currentChunk.getZ()+loadRange).findUnique();
 			if (result != null) {
 				currentPlayer.sendMessage("This chunk is being kept loaded by " + result.getPlayer() + " using a tag of " + result.getTag() + ".");
 				return;
@@ -121,7 +117,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 		for (int worldX = (-1 * loadRange); worldX <= loadRange; worldX++){
 			for (int worldZ = (-1 * loadRange); worldZ <= loadRange; worldZ++){
 				Chunk currentChunk = currentWorld.getChunkAt(cuEvent.getChunk().getX()+worldX, cuEvent.getChunk().getZ()+worldZ);
-				ChunkDB result = chunkTable.where().ieq("world", currentChunk.getWorld().getName()).eq("x", currentChunk.getX()).eq("z", currentChunk.getZ()).findUnique();
+				ChunkDB result = database.find(ChunkDB.class).where().ieq("world", currentChunk.getWorld().getName()).eq("x", currentChunk.getX()).eq("z", currentChunk.getZ()).findUnique();
 				if (result != null) {
 					if(debugMessages){
 						logMessage(Level.FINE, "Chunk (" + currentChunk.getWorld().getName() + ": " + worldX + ", " + worldZ + ") kept loaded by " + result.getPlayer() + " with a tag of " + result.getTag());
@@ -170,10 +166,10 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 				this.getServer().broadcast("ChunkyBlocks: " + player.getName() + " tried to use /setchunk but does not have permission", Server.BROADCAST_CHANNEL_ADMINISTRATIVE);
 				return false;
 			}
-			ChunkDB result = chunkTable.where().ieq("player", player.getName()).ieq("tag", tag).findUnique();
+			ChunkDB result = database.find(ChunkDB.class).where().ieq("player", player.getName()).ieq("tag", tag).findUnique();
 			Chunk here = player.getLocation().getChunk();
 			if (result==null) {
-				if (chunkTable.where().ieq("player", player.getName()).findRowCount() < maxChunks){
+				if (database.find(ChunkDB.class).where().ieq("player", player.getName()).findRowCount() < maxChunks){
 					ChunkDB newRecord = new ChunkDB();
 					newRecord.setPlayer(player.getName());
 					newRecord.setTag(tag);
@@ -205,7 +201,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 				this.getServer().broadcast("ChunkyBlocks: " + player.getName() + " tried to use /removechunk but does not have permission", Server.BROADCAST_CHANNEL_ADMINISTRATIVE);
 				return true;
 			}
-			ChunkDB result = chunkTable.where().ieq("player", player.getName()).ieq("tag",tag).findUnique();
+			ChunkDB result = database.find(ChunkDB.class).where().ieq("player", player.getName()).ieq("tag",tag).findUnique();
 			if (result == null){
 				player.sendMessage("A chunk with the label of " + tag + " was not found for your username.");
 				return true;
@@ -228,7 +224,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 				this.getServer().broadcast("ChunkyBlocks: " + player.getName() + " tried to use /mychunks but does not have permission", Server.BROADCAST_CHANNEL_ADMINISTRATIVE);
 				return false;
 			}
-			List<ChunkDB> results = chunkTable.where().ieq("player",player.getName()).findList();
+			List<ChunkDB> results = database.find(ChunkDB.class).where().ieq("player",player.getName()).findList();
 			if (results == null) {
 				player.sendMessage("No chunks are registered to your name");
 				return true;
@@ -276,9 +272,9 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 			List<ChunkDB> results;
 			if(playerName.equals("-")) {
 				playerName = "anyone";
-				results = chunkTable.findList();
+				results = database.find(ChunkDB.class).findList();
 			} else {
-				results = chunkTable.where().ieq("player", playerName).findList();
+				results = database.find(ChunkDB.class).where().ieq("player", playerName).findList();
 			}
 			if (results == null) {
 				player.sendMessage("No chunks are registered to " + playerName);
@@ -314,16 +310,17 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 			} else {
 				tag = "default";
 			}
-			ChunkDB result = chunkTable.where().ieq("player", playerName).ieq("tag", tag).findUnique();
+			ChunkDB result = database.find(ChunkDB.class).where().ieq("player", playerName).ieq("tag", tag).findUnique();
 			if (result == null) {
 				player.sendMessage("No chunk found for Player: " + playerName + ", with Tag: " + tag);
 				return true;
 			} else {
 				Chunk destChunk = result.getChunk();
 				Location teleTo = null;
-				for(int y=255;y>0;y--){
+				for(int y=255;y>1;y--){
 					if(!destChunk.getBlock(7, y-1, 7).isEmpty()){
 						teleTo = destChunk.getBlock(7, y, 7).getLocation();
+						break;
 					}
 				}
 				if(teleTo == null){
@@ -331,6 +328,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 					return true;
 				} else {
 					player.teleport(teleTo, TeleportCause.COMMAND);
+					return true;
 				}
 			}
 		}
@@ -352,7 +350,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 			} else {
 				tag = "default";
 			}
-			ChunkDB result = chunkTable.where().ieq("player", playerName).ieq("tag", tag).findUnique();
+			ChunkDB result = database.find(ChunkDB.class).where().ieq("player", playerName).ieq("tag", tag).findUnique();
 			if (result == null) {
 				player.sendMessage("A chunk with the label of " + tag + " was not found for " + playerName + ".");
 				return true;
