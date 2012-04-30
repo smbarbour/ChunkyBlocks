@@ -1,10 +1,8 @@
 name: ChunkyBlocks
-main: cah.melonar.ChunkyBlocks
-author: Melonar
+main: org.smbarbour.ChunkyBlocks
+author: smbarbour
 version: 1.0
-database: false
-depend: [SQLibrary]
-softdepend: [Vault]
+database: true
 description: |
   Block based - If sponge (default) is in a chunk, that chunk will not be unloaded.  When that chunk attempts to be unloaded, it will ensure the adjacent chunks are loaded.
   Command based - Chunks are specified by players (with permission) to remain loaded.  Those chunks and their adjacent chunks will remain loaded.
