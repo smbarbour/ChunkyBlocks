@@ -21,7 +21,9 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.plugin.PluginDescriptionFile;
@@ -40,6 +42,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 	private FileConfiguration myConfig;
 	private boolean debugMessages;
 	private boolean useBlock;
+	private boolean onlyOnlinePlayers;
 	private int loadRange;
 	private int minHeight;
 	private int maxHeight;
@@ -71,8 +74,52 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 		loadConfig();
 		this.database = this.getDatabase();
 		loadDatabase();
+		loadChunks();
 	}
 
+	private void loadChunks() {
+		List<ChunkDB> results = database.find(ChunkDB.class).findList();
+		Iterator<ChunkDB> it = results.iterator();
+		while(it.hasNext()) {
+			ChunkDB entry = it.next();
+			World affectedWorld = this.getServer().getWorld(entry.getWorld());
+			for (int worldX = (-1 * loadRange); worldX <= loadRange; worldX++){
+				for (int worldZ = (-1 * loadRange); worldZ <= loadRange; worldZ++){
+					affectedWorld.getChunkAt((entry.getX() + worldX), (entry.getZ() + worldZ)).load();
+				}
+			}
+		}
+	}
+
+	private void loadChunks(Player user) {
+		List<ChunkDB> results = database.find(ChunkDB.class).where().ieq("player", user.getName()).findList();
+		Iterator<ChunkDB> it = results.iterator();
+		while(it.hasNext()) {
+			ChunkDB entry = it.next();
+			World affectedWorld = this.getServer().getWorld(entry.getWorld());
+			for (int worldX = (-1 * loadRange); worldX <= loadRange; worldX++){
+				for (int worldZ = (-1 * loadRange); worldZ <= loadRange; worldZ++){
+					affectedWorld.getChunkAt((entry.getX() + worldX), (entry.getZ() + worldZ)).load();
+				}
+			}
+		}		
+	}
+
+	private void unloadChunks(Player user) {
+		List<ChunkDB> results = database.find(ChunkDB.class).where().ieq("player", user.getName()).findList();
+		Iterator<ChunkDB> it = results.iterator();
+		while(it.hasNext()) {
+			ChunkDB entry = it.next();
+			World affectedWorld = this.getServer().getWorld(entry.getWorld());
+			for (int worldX = (-1 * loadRange); worldX <= loadRange; worldX++){
+				for (int worldZ = (-1 * loadRange); worldZ <= loadRange; worldZ++){
+					affectedWorld.getChunkAt((entry.getX() + worldX), (entry.getZ() + worldZ)).unload(true, true);
+				}
+			}
+		}				
+	}
+
+	
 	private void loadDatabase() {
 		try {
 			database.find(ChunkDB.class).findRowCount();
@@ -91,8 +138,23 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 		maxHeight = myConfig.getInt("maxHeight",74);
 		clMaterial = Material.getMaterial(myConfig.getInt("blockType", 19));
 		maxChunks = myConfig.getInt("maxChunksPerUser",1);
+		onlyOnlinePlayers = myConfig.getBoolean("onlyOnlinePlayers",false);
 	}
 
+	@EventHandler
+	public final void cbPlayerQuit(PlayerQuitEvent pqeEvent) {
+		if (onlyOnlinePlayers) {
+			unloadChunks(pqeEvent.getPlayer());
+		}
+	}
+	
+	@EventHandler
+	public final void cbPlayerLogin(PlayerLoginEvent pleEvent) {
+		if (onlyOnlinePlayers) {
+			loadChunks(pleEvent.getPlayer());
+		}
+	}
+	
 	@EventHandler
 	public final void cbMovement(PlayerMoveEvent pmEvent){
     	if(pmEvent.getFrom().distance(pmEvent.getTo()) == 0)
@@ -119,11 +181,13 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 				Chunk currentChunk = currentWorld.getChunkAt(cuEvent.getChunk().getX()+worldX, cuEvent.getChunk().getZ()+worldZ);
 				ChunkDB result = database.find(ChunkDB.class).where().ieq("world", currentChunk.getWorld().getName()).eq("x", currentChunk.getX()).eq("z", currentChunk.getZ()).findUnique();
 				if (result != null) {
-					if(debugMessages){
-						logMessage(Level.FINE, "Chunk (" + currentChunk.getWorld().getName() + ": " + worldX + ", " + worldZ + ") kept loaded by " + result.getPlayer() + " with a tag of " + result.getTag());
+					if (!onlyOnlinePlayers || this.getServer().getOfflinePlayer(result.getPlayer()).isOnline()) {
+						if(debugMessages){
+							logMessage(Level.FINE, "Chunk (" + currentChunk.getWorld().getName() + ": " + worldX + ", " + worldZ + ") kept loaded by " + result.getPlayer() + " with a tag of " + result.getTag());
+						}
+						cuEvent.setCancelled(true);
+						return;
 					}
-					cuEvent.setCancelled(true);
-					return;
 				}
 				if(useBlock==true){
 					for (int chunkX = 0; chunkX <= 15; chunkX++){
