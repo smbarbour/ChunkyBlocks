@@ -165,9 +165,9 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 		if(currentPlayer.hasPermission("chunkyblocks.notifyborder") && !pmEvent.getFrom().getChunk().equals(pmEvent.getTo().getChunk())){
 			World currentWorld = currentPlayer.getWorld();
 			Chunk currentChunk = currentWorld.getChunkAt(currentPlayer.getLocation());
-			ChunkDB result = database.find(ChunkDB.class).where().ieq("world", currentChunk.getWorld().getName()).between("x", currentChunk.getX()-loadRange, currentChunk.getX()+loadRange ).between("z", currentChunk.getZ()-loadRange, currentChunk.getZ()+loadRange).findUnique();
-			if (result != null) {
-				currentPlayer.sendMessage("This chunk is being kept loaded by " + result.getPlayer() + " using a tag of " + result.getTag() + ".");
+			List<ChunkDB> results = database.find(ChunkDB.class).where().ieq("world", currentChunk.getWorld().getName()).between("x", currentChunk.getX()-loadRange, currentChunk.getX()+loadRange ).between("z", currentChunk.getZ()-loadRange, currentChunk.getZ()+loadRange).findList();
+			if (results.size() > 0) {
+				currentPlayer.sendMessage("This chunk is being kept loaded by " + results.get(0).getPlayer() + " using a tag of " + results.get(0).getTag() + ".");
 				return;
 			}
 		}
@@ -179,14 +179,19 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 		for (int worldX = (-1 * loadRange); worldX <= loadRange; worldX++){
 			for (int worldZ = (-1 * loadRange); worldZ <= loadRange; worldZ++){
 				Chunk currentChunk = currentWorld.getChunkAt(cuEvent.getChunk().getX()+worldX, cuEvent.getChunk().getZ()+worldZ);
-				ChunkDB result = database.find(ChunkDB.class).where().ieq("world", currentChunk.getWorld().getName()).eq("x", currentChunk.getX()).eq("z", currentChunk.getZ()).findUnique();
-				if (result != null) {
-					if (!onlyOnlinePlayers || this.getServer().getOfflinePlayer(result.getPlayer()).isOnline()) {
+				List<ChunkDB> results = database.find(ChunkDB.class).where().ieq("world", currentChunk.getWorld().getName()).eq("x", currentChunk.getX()).eq("z", currentChunk.getZ()).findList();
+				if (results.size() > 0) {
+					Iterator<ChunkDB> rowIterator = results.iterator();
+					while (rowIterator.hasNext())
+					{
+						ChunkDB row = rowIterator.next();
+					if (!onlyOnlinePlayers || this.getServer().getOfflinePlayer(row.getPlayer()).isOnline()) {
 						if(debugMessages){
-							logMessage(Level.FINE, "Chunk (" + currentChunk.getWorld().getName() + ": " + worldX + ", " + worldZ + ") kept loaded by " + result.getPlayer() + " with a tag of " + result.getTag());
+							logMessage(Level.FINE, "Chunk (" + currentChunk.getWorld().getName() + ": " + worldX + ", " + worldZ + ") kept loaded by " + row.getPlayer() + " with a tag of " + row.getTag());
 						}
 						cuEvent.setCancelled(true);
 						return;
+					}
 					}
 				}
 				if(useBlock==true){
