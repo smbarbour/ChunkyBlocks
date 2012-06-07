@@ -1,0 +1,40 @@
+<project basedir="." default="make" name="ChunkyBlocks">
+	<property name="target" location="target/"/>
+	<path id="classpath">
+		<fileset dir="lib" includes="**/*.jar"/>
+	</path>
+	<target name="make" depends="clean,lib,build,package" description="Make target">
+		<echo>Building project.</echo>
+	</target>
+	
+	<target name="clean" description="Clean project">
+		<echo>Cleaning...</echo>
+		<delete failonerror="false">
+			<fileset dir="build" includes="**/*"/>
+		</delete>
+		<delete file="dist/ChunkyBlocks.jar" />
+		<tstamp/>
+		<mkdir dir="dist"/>
+		<mkdir dir="build"/>
+		<mkdir dir="lib"/>
+	</target>
+	
+	<target name="lib">
+		<get src="http://dl.bukkit.org/latest-rb/craftbukkit.jar" dest="lib/craftbukkit.jar"/>
+	</target>
+		
+	<target name="build">
+		<echo>Compiling...</echo>
+		<javac target="1.6" source="1.6" srcdir="src" destdir="build" debug="true" debuglevel="lines,vars,source" classpathref="classpath" includeantruntime="false">
+			<compilerarg value="-Xbootclasspath/p:${toString:classpath}"/>
+		</javac>
+		<copy file="config.yml" tofile="build/config.yml"/>
+		<copy file="plugin.yml" tofile="build/plugin.yml"/>
+	</target>
+		
+	<target name="package">
+		<jar destfile="dist/ChunkyBlocks.jar" basedir="build"/>
+		<delete dir="build"/>
+		<delete dir="lib"/>
+	</target>
+</project>

@@ -9,4 +9,4 @@ useBlock: false
 
 # User-specified chunks
 maxChunksPerUser: 1
-onlyOfflinePlayers: false
+onlyOnlinePlayers: false
