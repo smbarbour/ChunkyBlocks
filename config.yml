@@ -1,12 +1,11 @@
 # ChunkyBlocks Configuration
 #
-useBlock: false
 range: 1
+
 
 # Chunkloading block check
 blockType: 19
-minHeight: 54
-maxHeight: 74
+useBlock: false
 
 # User-specified chunks
 maxChunksPerUser: 1

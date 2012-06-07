@@ -4,23 +4,26 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.persistence.PersistenceException;
 
-import org.bukkit.Location;
-import org.bukkit.Server;
 import org.bukkit.Chunk;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Server;
 import org.bukkit.World;
-import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -35,7 +38,7 @@ import org.bukkit.util.ChatPaginator.ChatPage;
 import com.avaje.ebean.EbeanServer;
 
 public class ChunkyBlocks extends JavaPlugin implements Listener {
-	private File pluginPath = new File("plugins" + File.pathSeparator + "ChunkyBlocks");
+	private File pluginPath = this.getDataFolder();
 	private final Logger myLogger = Logger.getLogger("Minecraft");
 	private PluginManager pm;
 	private PluginDescriptionFile info;
@@ -44,8 +47,6 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 	private boolean useBlock;
 	private boolean onlyOnlinePlayers;
 	private int loadRange;
-	private int minHeight;
-	private int maxHeight;
 	private int maxChunks;
 	private Material clMaterial;
 	private EbeanServer database;
@@ -134,8 +135,6 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 		debugMessages = myConfig.getBoolean("debug",false);
 		useBlock = myConfig.getBoolean("useBlock", true);
 		loadRange = myConfig.getInt("radius", 1);
-		minHeight = myConfig.getInt("minHeight",54);
-		maxHeight = myConfig.getInt("maxHeight",74);
 		clMaterial = Material.getMaterial(myConfig.getInt("blockType", 19));
 		maxChunks = myConfig.getInt("maxChunksPerUser",1);
 		onlyOnlinePlayers = myConfig.getBoolean("onlyOnlinePlayers",false);
@@ -194,26 +193,96 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 					}
 					}
 				}
-				if(useBlock==true){
-					for (int chunkX = 0; chunkX <= 15; chunkX++){
-						for (int chunkZ = 0; chunkZ <= 15; chunkZ++){
-							for (int chunkY = minHeight; chunkY <= maxHeight; chunkY++){
-								Block thisBlock = currentChunk.getBlock(chunkX, chunkY, chunkZ);
-								if (thisBlock.getType() == clMaterial){
-									if(debugMessages){
-										logMessage(Level.FINE, "Chunk (" + currentChunk.getWorld().getName() + ": " + worldX + ", " + worldZ + ") kept loaded by block at (" + thisBlock.getLocation().toString() + ")");
-									}
-									cuEvent.setCancelled(true);
-									return;
-								}
-							}
-						}
-					}
-				}
 			}
 		}
 	}
 
+	@EventHandler(priority=EventPriority.HIGHEST)
+	public final void onBlockPlace(BlockPlaceEvent bpEvent)
+	{
+		if (!bpEvent.isCancelled() && this.useBlock && bpEvent.getBlock().getType().equals(this.clMaterial))
+		{
+			Player actor = bpEvent.getPlayer();
+			Chunk here = bpEvent.getBlock().getChunk();
+			String tag = UUID.randomUUID().toString();
+			Result result = registerChunk(actor, here, tag);
+			actor.sendMessage(result.getMessage());
+			bpEvent.setCancelled(result.isSuccess());
+		}
+	}
+	
+	@EventHandler(priority=EventPriority.HIGHEST)
+	public final void onBlockBreak(BlockBreakEvent bbEvent)
+	{
+		if (!bbEvent.isCancelled() && this.useBlock && bbEvent.getBlock().getType().equals(this.clMaterial))
+		{
+			Player actor = bbEvent.getPlayer();
+			Chunk here = bbEvent.getBlock().getChunk();
+			Result result = removeChunk(actor, here);
+			actor.sendMessage(result.getMessage());
+			bbEvent.setCancelled(result.isSuccess());
+		}
+	}
+
+	public Result registerChunk(Player actor, Chunk here, String tag)
+	{
+		Result result = new Result();
+		if (!actor.hasPermission("chunkyblocks.set"))
+		{
+			result.setMessage("You do not have permission to register chunks");
+			result.setSuccess(false);
+		} else {
+			ChunkDB search = database.find(ChunkDB.class).where().ieq("world", here.getWorld().getName()).eq("x", here.getX()).eq("z", here.getZ()).findUnique();
+			if (search != null)
+			{
+				result.setMessage("This chunk is already registered to " + search.getPlayer() + " as " + search.getTag() + ".");
+				result.setSuccess(false);
+			} else {
+				int registered = database.find(ChunkDB.class).where().ieq("player", actor.getName()).findRowCount();
+				if (registered < this.maxChunks || actor.hasPermission("chunkyblocks.overridechunklimit")) {
+					ChunkDB newRecord = new ChunkDB();
+					newRecord.setPlayer(actor.getName());
+					newRecord.setChunk(here);
+					newRecord.setTag(tag);
+					database.save(newRecord);
+					result.setMessage("This chunk is now registered to " + actor.getName() + " as " + tag + ".");
+					result.setSuccess(true);
+				} else {
+					result.setMessage("You have already reached your chunkloading limit.");
+					result.setSuccess(false);
+				}
+			}
+		}
+		return result;
+	}
+	
+	public Result removeChunk(Player actor, Chunk target)
+	{
+		Result result = new Result();
+		if (!(actor.hasPermission("chunkyblocks.remove") || actor.hasPermission("chunkyblocks.adminremove")))
+		{
+			result.setMessage("You do not have permission to remove chunks");
+			result.setSuccess(false);
+		} else {
+			ChunkDB search = database.find(ChunkDB.class).where().ieq("world", target.getWorld().getName()).eq("x", target.getX()).eq("z", target.getZ()).findUnique();
+			if (search != null)
+			{
+				if (search.getPlayer().equals(actor.getName()) || actor.hasPermission("chunkyblocks.adminremove"))
+				{
+					result.setMessage("This chunk is no longer registered to " + search.getPlayer() + " as " + search.getTag() + ".");
+					result.setSuccess(true);
+					if (!actor.getName().equals(search.getPlayer()))
+					{
+						this.getServer().getPlayer(search.getPlayer()).sendMessage("Your chunk registered as " + search.getTag() + " has been removed from the list.");
+					}
+					database.delete(search);
+				}
+			}
+		}
+		return result;
+	}
+	
+	@Override
 	public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
 		Player player = null;
 		if(sender instanceof Player) {
@@ -233,10 +302,17 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 			if(!player.hasPermission("chunkyblocks.set")){
 				player.sendMessage("You do not have permission to use this command.");
 				this.getServer().broadcast("ChunkyBlocks: " + player.getName() + " tried to use /setchunk but does not have permission", Server.BROADCAST_CHANNEL_ADMINISTRATIVE);
-				return false;
+				return true;
+			}
+			Chunk here = player.getLocation().getChunk();
+			ChunkDB findChunk = database.find(ChunkDB.class).where().ieq("world", here.getWorld().getName()).eq("x", here.getX()).eq("z", here.getZ()).findUnique();
+			if (findChunk != null)
+			{
+				player.sendMessage("This chunk is already registered to " + findChunk.getPlayer() + " as " + findChunk.getTag() + ".");
+				return true;
 			}
 			ChunkDB result = database.find(ChunkDB.class).where().ieq("player", player.getName()).ieq("tag", tag).findUnique();
-			Chunk here = player.getLocation().getChunk();
+
 			if (result==null) {
 				if (database.find(ChunkDB.class).where().ieq("player", player.getName()).findRowCount() < maxChunks){
 					ChunkDB newRecord = new ChunkDB();
