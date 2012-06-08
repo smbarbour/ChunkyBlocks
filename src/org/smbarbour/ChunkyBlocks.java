@@ -10,6 +10,7 @@ import java.util.logging.Logger;
 
 import javax.persistence.PersistenceException;
 
+import org.bukkit.ChatColor;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -50,6 +51,7 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 	private int maxChunks;
 	private Material clMaterial;
 	private EbeanServer database;
+	private List<String> suppressed = new ArrayList<String>();
 
 	@Override
 	public List<Class<?>> getDatabaseClasses() {
@@ -119,7 +121,6 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 			}
 		}				
 	}
-
 	
 	private void loadDatabase() {
 		try {
@@ -161,6 +162,9 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
     		return;
     	}
 		Player currentPlayer = pmEvent.getPlayer();
+		if (suppressed.contains(currentPlayer.getName())){
+			return;
+		}
 		if(currentPlayer.hasPermission("chunkyblocks.notifyborder") && !pmEvent.getFrom().getChunk().equals(pmEvent.getTo().getChunk())){
 			World currentWorld = currentPlayer.getWorld();
 			Chunk currentChunk = currentWorld.getChunkAt(currentPlayer.getLocation());
@@ -238,18 +242,27 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 				result.setMessage("This chunk is already registered to " + search.getPlayer() + " as " + search.getTag() + ".");
 				result.setSuccess(false);
 			} else {
-				int registered = database.find(ChunkDB.class).where().ieq("player", actor.getName()).findRowCount();
-				if (registered < this.maxChunks || actor.hasPermission("chunkyblocks.overridechunklimit")) {
-					ChunkDB newRecord = new ChunkDB();
-					newRecord.setPlayer(actor.getName());
-					newRecord.setChunk(here);
-					newRecord.setTag(tag);
-					database.save(newRecord);
-					result.setMessage("This chunk is now registered to " + actor.getName() + " as " + tag + ".");
-					result.setSuccess(true);
+				ChunkDB existing = database.find(ChunkDB.class).where().ieq("player", actor.getName()).ieq("tag", tag).findUnique();
+				if (existing == null)
+				{
+					int registered = database.find(ChunkDB.class).where().ieq("player", actor.getName()).findRowCount();
+					if (registered < this.maxChunks || actor.hasPermission("chunkyblocks.overridechunklimit")) {
+						ChunkDB newRecord = new ChunkDB();
+						newRecord.setPlayer(actor.getName());
+						newRecord.setChunk(here);
+						newRecord.setTag(tag);
+						database.save(newRecord);
+						result.setMessage("This chunk is now registered to " + actor.getName() + " as " + tag + ".");
+						result.setSuccess(true);
+					} else {
+						result.setMessage("You have already reached your chunkloading limit.");
+						result.setSuccess(false);
+					}
 				} else {
-					result.setMessage("You have already reached your chunkloading limit.");
-					result.setSuccess(false);
+					existing.setChunk(here);
+					database.save(existing);
+					result.setMessage("Location (" + tag + ") updated in chunkloading list.");
+					result.setSuccess(true);
 				}
 			}
 		}
@@ -282,11 +295,24 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 		return result;
 	}
 	
+	public Chunk findChunk(Player actor, String tag)
+	{
+		Chunk here = null;
+		ChunkDB search = database.find(ChunkDB.class).where().ieq("player", actor.getName()).ieq("tag",tag).findUnique();
+		if (search != null)
+		{
+			here=search.getChunk();
+		}
+		return here;
+	}
+	
 	@Override
 	public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
 		Player player = null;
+		Chunk here = null;
 		if(sender instanceof Player) {
 			player = (Player) sender;
+			here = player.getLocation().getChunk();
 		} else {
 			sender.sendMessage("ChunkyBlocks commands are not available from the console.");
 		}
@@ -299,40 +325,9 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 			if(tag.isEmpty()) {
 				tag = "default";
 			}
-			if(!player.hasPermission("chunkyblocks.set")){
-				player.sendMessage("You do not have permission to use this command.");
-				this.getServer().broadcast("ChunkyBlocks: " + player.getName() + " tried to use /setchunk but does not have permission", Server.BROADCAST_CHANNEL_ADMINISTRATIVE);
-				return true;
-			}
-			Chunk here = player.getLocation().getChunk();
-			ChunkDB findChunk = database.find(ChunkDB.class).where().ieq("world", here.getWorld().getName()).eq("x", here.getX()).eq("z", here.getZ()).findUnique();
-			if (findChunk != null)
-			{
-				player.sendMessage("This chunk is already registered to " + findChunk.getPlayer() + " as " + findChunk.getTag() + ".");
-				return true;
-			}
-			ChunkDB result = database.find(ChunkDB.class).where().ieq("player", player.getName()).ieq("tag", tag).findUnique();
-
-			if (result==null) {
-				if (database.find(ChunkDB.class).where().ieq("player", player.getName()).findRowCount() < maxChunks){
-					ChunkDB newRecord = new ChunkDB();
-					newRecord.setPlayer(player.getName());
-					newRecord.setTag(tag);
-					newRecord.setChunk(here);
-					database.save(newRecord);
-					player.sendMessage("Location (" + tag + ") added to chunkloading list.");
-					return true;
-				} else {
-					player.sendMessage("You have already reached your chunkloading limit.");
-					return true;
-				}
-			} else {
-				result.setChunk(here);
-				database.save(result);
-				player.sendMessage("Location (" + tag + ") updated in chunkloading list.");
-				return true;
-			}
-		}
+			Result result = registerChunk(player,here,tag);
+			player.sendMessage(result.getMessage());
+		}		
 		if (commandName.equals("removechunk")){
 			String tag = "";
 			if(args.length > 0){
@@ -341,20 +336,14 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 			if(tag.isEmpty()) {
 				tag = "default";
 			}
-			if(!player.hasPermission("chunkyblocks.remove")){
-				player.sendMessage("You do not have permission to use this command.");
-				this.getServer().broadcast("ChunkyBlocks: " + player.getName() + " tried to use /removechunk but does not have permission", Server.BROADCAST_CHANNEL_ADMINISTRATIVE);
+			here = findChunk(player,tag);
+			if (here == null)
+			{
+				player.sendMessage("No chunk was found with a label of " + ChatColor.AQUA + tag + ChatColor.RESET + ".");
 				return true;
 			}
-			ChunkDB result = database.find(ChunkDB.class).where().ieq("player", player.getName()).ieq("tag",tag).findUnique();
-			if (result == null){
-				player.sendMessage("A chunk with the label of " + tag + " was not found for your username.");
-				return true;
-			} else {
-				database.delete(result);
-				player.sendMessage("The chunk labelled " + tag + " has been removed from the database.");
-				return true;
-			}
+			Result result = removeChunk(player, here);
+			player.sendMessage(result.getMessage());
 		}
 		if (commandName.equals("mychunks")){
 			String page = "";
@@ -495,14 +484,16 @@ public class ChunkyBlocks extends JavaPlugin implements Listener {
 			} else {
 				tag = "default";
 			}
-			ChunkDB result = database.find(ChunkDB.class).where().ieq("player", playerName).ieq("tag", tag).findUnique();
-			if (result == null) {
-				player.sendMessage("A chunk with the label of " + tag + " was not found for " + playerName + ".");
+			here = findChunk(this.getServer().getPlayer(playerName),tag);
+			Result result = removeChunk(this.getServer().getPlayer(playerName),here);
+			player.sendMessage(result.getMessage());
+		}
+		if (commandName.equals("cbsilence")){
+			if (suppressed.contains(player.getName())){
+				suppressed.remove(player.getName());
 				return true;
 			} else {
-				database.delete(result);
-				player.sendMessage("The chunk labelled " + tag + " belonging to " + playerName + " has been removed from the database.");
-				return true;
+				suppressed.add(player.getName());
 			}
 		}
 		return false;

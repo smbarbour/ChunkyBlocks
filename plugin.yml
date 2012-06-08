@@ -31,6 +31,9 @@ commands:
     description: Remove another player's chunk from the list.
     permission: chunkyblocks.adminremove
     usage: /<command> <player> [label] - Remove specified chunk.
+  cbsilence:
+    description: Toggle boundary notification messages.
+    usage: /<command> - Toggle notification messages.
 permissions:
   chunkyblocks.user:
     default: op
