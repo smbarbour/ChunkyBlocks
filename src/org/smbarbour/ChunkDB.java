@@ -21,7 +21,7 @@ public class ChunkDB {
 	@NotEmpty
 	private String player;
 	
-	@Length(max=32)
+	@Length(max=64)
 	@NotEmpty
 	private String tag;
 	
